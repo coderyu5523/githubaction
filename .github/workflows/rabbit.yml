@@ -7,16 +7,16 @@ on:
     paths:
       - "a.txt" # a.txt 파일이 변경될 때만 실행
 
-# jobs:
-#   build:
-#     runs-on: ubuntu-latest
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
 #     steps:
 #       - name: Checkout repository
 #         uses: actions/checkout@v3
 
-#       - name: HelloWorld
-#         run: echo "HelloWorld"
+      - name: HelloWorld
+        run: echo "HelloWorld"
 
 #       - name: RabbitMQ
 #         run: |
