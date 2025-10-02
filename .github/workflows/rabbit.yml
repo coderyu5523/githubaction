@@ -2,23 +2,50 @@ name: rabbit
 
 on:
   push:
-    branches:
-      - master
+    branches: [master]
     paths:
-      - "a.txt" # a.txt 파일이 변경될 때만 실행
+      - "a.txt" # a.txt 변경시에만 실행
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
+    services:
+      rabbitmq:
+        image: rabbitmq:4.1-management # 관리 콘솔 포함 이미지
+        ports:
+          - 5672:5672
+          - 15672:15672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: HelloWorld
-        run: echo "HelloWorld"
+      - name: Wait for RabbitMQ (management API)
+        run: |
+          for i in {1..30}; do
+            if curl -s -u guest:guest http://localhost:15672/api/overview >/dev/null; then
+              echo "RabbitMQ is up"; exit 0
+            fi
+            echo "Waiting for RabbitMQ... ($i)"
+            sleep 2
+          done
+          echo "RabbitMQ did not become ready in time"
+          exit 1
 
-      - name: RabbitMQ
+      - name: Declare queue (yml.queue)
+        run: |
+          curl -u "guest:guest" \
+            -H "content-type: application/json" \
+            -X PUT "http://localhost:15672/api/queues/%2F/yml.queue" \
+            -d '{"durable":true}'
+
+      - name: Publish message
         run: |
           curl -u "guest:guest" \
             -H "content-type: application/json" \
