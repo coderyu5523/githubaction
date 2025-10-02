@@ -12,19 +12,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      #       - name: Checkout repository
-      #         uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
       - name: HelloWorld
         run: echo "HelloWorld"
-#       - name: RabbitMQ
-#         run: |
-#           curl -u "guest:guest" \
-#             -H "content-type: application/json" \
-#             -X POST "http://localhost:15672/api/exchanges/%2F/amq.default/publish" \
-#             -d '{
-#               "properties": {"content_type":"text/plain"},
-#               "routing_key":"yml.queue",
-#               "payload":"a.txt changed!",
-#               "payload_encoding":"string"
-#             }'
+
+      - name: RabbitMQ
+        run: |
+          curl -u "guest:guest" \
+            -H "content-type: application/json" \
+            -X POST "http://localhost:15672/api/exchanges/%2F/amq.default/publish" \
+            -d '{
+              "properties": {"content_type":"text/plain"},
+              "routing_key":"yml.queue",
+              "payload":"a.txt changed!",
+              "payload_encoding":"string"
+            }'
