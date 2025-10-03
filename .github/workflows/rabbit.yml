@@ -3,18 +3,19 @@ name: rabbit
 on:
   push:
     branches: [master]
-    paths: ["a.txt"] # a.txt 변경시에만 실행
+    paths: ["a.txt"]
 
 jobs:
   build:
-    runs-on: self-hosted # ← 네 PC(러너)에서 실행
+    runs-on: [self-hosted, Windows] # ← Windows 러너로 강제
+    defaults:
+      run:
+        shell: powershell # ← PowerShell(5.x) 사용
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Wait for local RabbitMQ (management API)
-        shell: pwsh
         run: |
           $cred = New-Object System.Management.Automation.PSCredential(
             "guest", (ConvertTo-SecureString "guest" -AsPlainText -Force)
@@ -24,8 +25,8 @@ jobs:
           for ($i=1; $i -le 30; $i++) {
             try {
               Invoke-RestMethod -Uri "http://localhost:15672/api/overview" `
-                                 -Authentication Basic -Credential $cred `
-                                 -TimeoutSec 5 | Out-Null
+                                -Authentication Basic -Credential $cred `
+                                -TimeoutSec 5 | Out-Null
               Write-Host "RabbitMQ is up"
               $ok = $true
               break
@@ -37,7 +38,6 @@ jobs:
           if (-not $ok) { throw "RabbitMQ did not become ready in time" }
 
       - name: Declare queue (yml.queue)
-        shell: pwsh
         run: |
           $cred = New-Object System.Management.Automation.PSCredential(
             "guest", (ConvertTo-SecureString "guest" -AsPlainText -Force)
@@ -50,7 +50,6 @@ jobs:
             -Body $body
 
       - name: Publish message
-        shell: pwsh
         run: |
           $cred = New-Object System.Management.Automation.PSCredential(
             "guest", (ConvertTo-SecureString "guest" -AsPlainText -Force)
@@ -66,11 +65,9 @@ jobs:
             -Uri "http://localhost:15672/api/exchanges/%2F/amq.default/publish" `
             -Headers $headers -Authentication Basic -Credential $cred `
             -Body $body
-          $res | ConvertTo-Json | Out-File publish.json
           if (-not $res.routed) { throw "Publish not routed" }
 
       - name: Verify queue depth (>=1)
-        shell: pwsh
         run: |
           $cred = New-Object System.Management.Automation.PSCredential(
             "guest", (ConvertTo-SecureString "guest" -AsPlainText -Force)
