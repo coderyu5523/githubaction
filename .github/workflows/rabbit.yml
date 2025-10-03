@@ -7,78 +7,58 @@ on:
 
 jobs:
   build:
-    runs-on: [self-hosted, Windows] # ← Windows 러너로 강제
+    runs-on: [self-hosted, Windows] # Windows self-hosted 러너에서 실행
     defaults:
       run:
-        shell: powershell # ← PowerShell(5.x) 사용
+        shell: cmd # cmd로 실행 (임시 .ps1 생성 안 함)
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Allow scripts in this process only
-        run: |
-          Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
-          Write-Host "Current execution policy:"
-          Get-ExecutionPolicy -List
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Wait for local RabbitMQ (management API)
-        run: |
-          $cred = New-Object System.Management.Automation.PSCredential(
-            "guest", (ConvertTo-SecureString "guest" -AsPlainText -Force)
-          )
-
-          $ok = $false
-          for ($i=1; $i -le 30; $i++) {
-            try {
-              Invoke-RestMethod -Uri "http://localhost:15672/api/overview" `
-                                -Authentication Basic -Credential $cred `
-                                -TimeoutSec 5 | Out-Null
-              Write-Host "RabbitMQ is up"
-              $ok = $true
-              break
+        run: >
+          powershell -NoProfile -ExecutionPolicy Bypass -Command
+          "$cred = New-Object System.Management.Automation.PSCredential('guest',(ConvertTo-SecureString 'guest' -AsPlainText -Force));
+          $ok=$false;
+          for($i=1;$i -le 30;$i++){
+            try{
+              Invoke-RestMethod -Uri 'http://localhost:15672/api/overview' -Authentication Basic -Credential $cred -TimeoutSec 5 | Out-Null;
+              Write-Host 'RabbitMQ is up'; $ok=$true; break
             } catch {
-              Write-Host "Waiting for RabbitMQ... ($i)"
-              Start-Sleep -Seconds 2
+              Write-Host ('Waiting for RabbitMQ... ('+$i+')'); Start-Sleep -Seconds 2
             }
-          }
-          if (-not $ok) { throw "RabbitMQ did not become ready in time" }
+          };
+          if(-not $ok){ throw 'RabbitMQ did not become ready in time' }"
 
       - name: Declare queue (yml.queue)
-        run: |
-          $cred = New-Object System.Management.Automation.PSCredential(
-            "guest", (ConvertTo-SecureString "guest" -AsPlainText -Force)
-          )
-          $headers = @{ "content-type" = "application/json" }
-          $body = @{ durable = $true } | ConvertTo-Json
-          Invoke-RestMethod -Method Put `
-            -Uri "http://localhost:15672/api/queues/%2F/yml.queue" `
-            -Headers $headers -Authentication Basic -Credential $cred `
-            -Body $body
+        run: >
+          powershell -NoProfile -ExecutionPolicy Bypass -Command
+          "$cred = New-Object System.Management.Automation.PSCredential('guest',(ConvertTo-SecureString 'guest' -AsPlainText -Force));
+          $headers = @{ 'content-type' = 'application/json' };
+          $body = @{ durable = $true } | ConvertTo-Json;
+          Invoke-RestMethod -Method Put -Uri 'http://localhost:15672/api/queues/%2F/yml.queue'
+          -Headers $headers -Authentication Basic -Credential $cred -Body $body"
 
       - name: Publish message
-        run: |
-          $cred = New-Object System.Management.Automation.PSCredential(
-            "guest", (ConvertTo-SecureString "guest" -AsPlainText -Force)
-          )
-          $headers = @{ "content-type" = "application/json" }
+        run: >
+          powershell -NoProfile -ExecutionPolicy Bypass -Command
+          "$cred = New-Object System.Management.Automation.PSCredential('guest',(ConvertTo-SecureString 'guest' -AsPlainText -Force));
+          $headers = @{ 'content-type' = 'application/json' };
           $body = @{
-            properties       = @{ content_type = "text/plain" }
-            routing_key      = "yml.queue"
-            payload          = "a.txt changed!"
-            payload_encoding = "string"
-          } | ConvertTo-Json
-          $res = Invoke-RestMethod -Method Post `
-            -Uri "http://localhost:15672/api/exchanges/%2F/amq.default/publish" `
-            -Headers $headers -Authentication Basic -Credential $cred `
-            -Body $body
-          if (-not $res.routed) { throw "Publish not routed" }
+            properties       = @{ content_type = 'text/plain' };
+            routing_key      = 'yml.queue';
+            payload          = 'a.txt changed!';
+            payload_encoding = 'string'
+          } | ConvertTo-Json;
+          $res = Invoke-RestMethod -Method Post -Uri 'http://localhost:15672/api/exchanges/%2F/amq.default/publish'
+            -Headers $headers -Authentication Basic -Credential $cred -Body $body;
+          if(-not $res.routed){ throw 'Publish not routed' }"
 
       - name: Verify queue depth (>=1)
-        run: |
-          $cred = New-Object System.Management.Automation.PSCredential(
-            "guest", (ConvertTo-SecureString "guest" -AsPlainText -Force)
-          )
-          $q = Invoke-RestMethod -Authentication Basic -Credential $cred `
-               -Uri "http://localhost:15672/api/queues/%2F/yml.queue"
-          Write-Host "messages_ready=$($q.messages_ready)"
-          if ($q.messages_ready -lt 1) { throw "No message ready in queue" }
+        run: >
+          powershell -NoProfile -ExecutionPolicy Bypass -Command
+          "$cred = New-Object System.Management.Automation.PSCredential('guest',(ConvertTo-SecureString 'guest' -AsPlainText -Force));
+          $q = Invoke-RestMethod -Authentication Basic -Credential $cred -Uri 'http://localhost:15672/api/queues/%2F/yml.queue';
+          Write-Host ('messages_ready=' + $q.messages_ready);
+          if($q.messages_ready -lt 1){ throw 'No message ready in queue' }"
