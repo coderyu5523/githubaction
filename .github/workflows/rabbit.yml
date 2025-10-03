@@ -13,17 +13,16 @@ jobs:
         shell: cmd
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Wait for local RabbitMQ (management API)
-        run: powershell -NoProfile -ExecutionPolicy Bypass -Command "$cred = New-Object System.Management.Automation.PSCredential('guest',(ConvertTo-SecureString 'guest' -AsPlainText -Force)); $ok=$false; for($i=1;$i -le 30;$i++){ try { Invoke-RestMethod -Uri 'http://localhost:15672/api/overview' -Authentication Basic -Credential $cred -TimeoutSec 5 | Out-Null; Write-Host 'RabbitMQ is up'; $ok=$true; break } catch { Write-Host ('Waiting for RabbitMQ... ('+$i+')'); Start-Sleep -Seconds 2 } }; if(-not $ok){ throw 'RabbitMQ did not become ready in time' }"
+        run: powershell -NoProfile -ExecutionPolicy Bypass -Command "$pair='guest:guest'; $b=[Text.Encoding]::ASCII.GetBytes($pair); $base64=[Convert]::ToBase64String($b); $h=@{ Authorization=('Basic '+$base64) }; $ok=$false; for($i=1;$i -le 30;$i++){ try{ Invoke-RestMethod -Uri 'http://127.0.0.1:15672/api/overview' -Headers $h -TimeoutSec 5 | Out-Null; Write-Host 'RabbitMQ is up'; $ok=$true; break } catch { Write-Host ('Waiting...('+ $i +')  ERROR: '+$_.Exception.Message); Start-Sleep -Seconds 2 } }; if(-not $ok){ throw 'RabbitMQ did not become ready in time' }"
 
       - name: Declare queue (yml.queue)
-        run: powershell -NoProfile -ExecutionPolicy Bypass -Command "$cred = New-Object System.Management.Automation.PSCredential('guest',(ConvertTo-SecureString 'guest' -AsPlainText -Force)); $headers = @{ 'content-type' = 'application/json' }; $body = @{ durable = $true } | ConvertTo-Json; Invoke-RestMethod -Method Put -Uri 'http://localhost:15672/api/queues/%2F/yml.queue' -Headers $headers -Authentication Basic -Credential $cred -Body $body"
+        run: powershell -NoProfile -ExecutionPolicy Bypass -Command "$pair='guest:guest'; $b=[Text.Encoding]::ASCII.GetBytes($pair); $base64=[Convert]::ToBase64String($b); $h=@{ Authorization=('Basic '+$base64); 'content-type'='application/json' }; $body = @{ durable = $true } | ConvertTo-Json; Invoke-RestMethod -Method Put -Uri 'http://127.0.0.1:15672/api/queues/%2F/yml.queue' -Headers $h -Body $body"
 
       - name: Publish message
-        run: powershell -NoProfile -ExecutionPolicy Bypass -Command "$cred = New-Object System.Management.Automation.PSCredential('guest',(ConvertTo-SecureString 'guest' -AsPlainText -Force)); $headers = @{ 'content-type' = 'application/json' }; $body = @{ properties = @{ content_type = 'text/plain' }; routing_key = 'yml.queue'; payload = 'a.txt changed!'; payload_encoding = 'string' } | ConvertTo-Json; $res = Invoke-RestMethod -Method Post -Uri 'http://localhost:15672/api/exchanges/%2F/amq.default/publish' -Headers $headers -Authentication Basic -Credential $cred -Body $body; if(-not $res.routed){ throw 'Publish not routed' }"
+        run: powershell -NoProfile -ExecutionPolicy Bypass -Command "$pair='guest:guest'; $b=[Text.Encoding]::ASCII.GetBytes($pair); $base64=[Convert]::ToBase64String($b); $h=@{ Authorization=('Basic '+$base64); 'content-type'='application/json' }; $body = @{ properties=@{ content_type='text/plain' }; routing_key='yml.queue'; payload='a.txt changed!'; payload_encoding='string' } | ConvertTo-Json; $res = Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:15672/api/exchanges/%2F/amq.default/publish' -Headers $h -Body $body; if(-not $res.routed){ throw 'Publish not routed' }"
 
       - name: Verify queue depth (>=1)
-        run: powershell -NoProfile -ExecutionPolicy Bypass -Command "$cred = New-Object System.Management.Automation.PSCredential('guest',(ConvertTo-SecureString 'guest' -AsPlainText -Force)); $q = Invoke-RestMethod -Authentication Basic -Credential $cred -Uri 'http://localhost:15672/api/queues/%2F/yml.queue'; Write-Host ('messages_ready=' + $q.messages_ready); if($q.messages_ready -lt 1){ throw 'No message ready in queue' }"
+        run: powershell -NoProfile -ExecutionPolicy Bypass -Command "$pair='guest:guest'; $b=[Text.Encoding]::ASCII.GetBytes($pair); $base64=[Convert]::ToBase64String($b); $h=@{ Authorization=('Basic '+$base64) }; $q = Invoke-RestMethod -Uri 'http://127.0.0.1:15672/api/queues/%2F/yml.queue' -Headers $h; Write-Host ('messages_ready='+$q.messages_ready); if($q.messages_ready -lt 1){ throw 'No message ready in queue' }"
