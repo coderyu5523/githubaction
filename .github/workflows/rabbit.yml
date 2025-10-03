@@ -3,56 +3,79 @@ name: rabbit
 on:
   push:
     branches: [master]
-    paths:
-      - "a.txt" # a.txt 변경시에만 실행
+    paths: ["a.txt"] # a.txt 변경시에만 실행
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-
-    services:
-      rabbitmq:
-        image: rabbitmq:4.1-management # 관리 콘솔 포함 이미지
-        ports:
-          - 5672:5672
-          - 15672:15672
-        options: >-
-          --health-cmd "rabbitmq-diagnostics -q ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 12
+    runs-on: self-hosted # ← 네 PC(러너)에서 실행
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Wait for RabbitMQ (management API)
+      - name: Wait for local RabbitMQ (management API)
+        shell: pwsh
         run: |
-          for i in {1..30}; do
-            if curl -s -u guest:guest http://localhost:15672/api/overview >/dev/null; then
-              echo "RabbitMQ is up"; exit 0
-            fi
-            echo "Waiting for RabbitMQ... ($i)"
-            sleep 2
-          done
-          echo "RabbitMQ did not become ready in time"
-          exit 1
+          $cred = New-Object System.Management.Automation.PSCredential(
+            "guest", (ConvertTo-SecureString "guest" -AsPlainText -Force)
+          )
+
+          $ok = $false
+          for ($i=1; $i -le 30; $i++) {
+            try {
+              Invoke-RestMethod -Uri "http://localhost:15672/api/overview" `
+                                 -Authentication Basic -Credential $cred `
+                                 -TimeoutSec 5 | Out-Null
+              Write-Host "RabbitMQ is up"
+              $ok = $true
+              break
+            } catch {
+              Write-Host "Waiting for RabbitMQ... ($i)"
+              Start-Sleep -Seconds 2
+            }
+          }
+          if (-not $ok) { throw "RabbitMQ did not become ready in time" }
 
       - name: Declare queue (yml.queue)
+        shell: pwsh
         run: |
-          curl -u "guest:guest" \
-            -H "content-type: application/json" \
-            -X PUT "http://localhost:15672/api/queues/%2F/yml.queue" \
-            -d '{"durable":true}'
+          $cred = New-Object System.Management.Automation.PSCredential(
+            "guest", (ConvertTo-SecureString "guest" -AsPlainText -Force)
+          )
+          $headers = @{ "content-type" = "application/json" }
+          $body = @{ durable = $true } | ConvertTo-Json
+          Invoke-RestMethod -Method Put `
+            -Uri "http://localhost:15672/api/queues/%2F/yml.queue" `
+            -Headers $headers -Authentication Basic -Credential $cred `
+            -Body $body
 
       - name: Publish message
+        shell: pwsh
         run: |
-          curl -u "guest:guest" \
-            -H "content-type: application/json" \
-            -X POST "http://localhost:15672/api/exchanges/%2F/amq.default/publish" \
-            -d '{
-              "properties": {"content_type":"text/plain"},
-              "routing_key":"yml.queue",
-              "payload":"a.txt changed!",
-              "payload_encoding":"string"
-            }'
+          $cred = New-Object System.Management.Automation.PSCredential(
+            "guest", (ConvertTo-SecureString "guest" -AsPlainText -Force)
+          )
+          $headers = @{ "content-type" = "application/json" }
+          $body = @{
+            properties       = @{ content_type = "text/plain" }
+            routing_key      = "yml.queue"
+            payload          = "a.txt changed!"
+            payload_encoding = "string"
+          } | ConvertTo-Json
+          $res = Invoke-RestMethod -Method Post `
+            -Uri "http://localhost:15672/api/exchanges/%2F/amq.default/publish" `
+            -Headers $headers -Authentication Basic -Credential $cred `
+            -Body $body
+          $res | ConvertTo-Json | Out-File publish.json
+          if (-not $res.routed) { throw "Publish not routed" }
+
+      - name: Verify queue depth (>=1)
+        shell: pwsh
+        run: |
+          $cred = New-Object System.Management.Automation.PSCredential(
+            "guest", (ConvertTo-SecureString "guest" -AsPlainText -Force)
+          )
+          $q = Invoke-RestMethod -Authentication Basic -Credential $cred `
+               -Uri "http://localhost:15672/api/queues/%2F/yml.queue"
+          Write-Host "messages_ready=$($q.messages_ready)"
+          if ($q.messages_ready -lt 1) { throw "No message ready in queue" }
