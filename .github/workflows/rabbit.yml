@@ -15,6 +15,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Allow scripts in this process only
+        run: |
+          Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
+          Write-Host "Current execution policy:"
+          Get-ExecutionPolicy -List
+
       - name: Wait for local RabbitMQ (management API)
         run: |
           $cred = New-Object System.Management.Automation.PSCredential(
