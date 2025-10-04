@@ -1,9 +1,9 @@
 package com.example.githubaction;
 
-import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class RabbitConfig {
@@ -11,6 +11,6 @@ public class RabbitConfig {
   RabbitConfig(AppProps props){ this.props = props; }
 
   @Bean Queue fileQueue() {
-    return QueueBuilder.durable(props.queue()).build();
+    return QueueBuilder.durable(props.getQueue()).build();
   }
 }
